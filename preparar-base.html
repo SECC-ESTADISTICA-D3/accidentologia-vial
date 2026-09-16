@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preparar base para publicar — Accidentología Vial</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--tinta:#10243A;--azul:#2E7BB5;--papel:#EBEFF4;--linea:#D3DBE4;--ok:#5B8C6A;--mal:#A3232B}
+*{box-sizing:border-box}
+body{margin:0;background:var(--papel);color:var(--tinta);font-family:'Archivo',system-ui,sans-serif;font-size:15px;line-height:1.55}
+.marca{background:var(--tinta);color:#fff;padding:14px 20px;display:flex;gap:14px;align-items:center}
+.marca img{height:46px}
+.marca div{font-size:12.5px;color:#B9C9D9}
+.marca b{display:block;color:#fff;font-size:13.5px}
+main{max-width:720px;margin:0 auto;padding:32px 20px 70px}
+h1{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 0 10px;max-width:18ch}
+.intro{color:#3C556E;margin:0 0 26px}
+.caja{background:#fff;border:1px solid var(--linea);border-radius:10px;padding:22px;box-shadow:0 1px 2px rgba(16,36,58,.08),0 6px 18px rgba(16,36,58,.06)}
+.soltar{border:2px dashed var(--linea);border-radius:10px;padding:34px 20px;text-align:center}
+.soltar.sobre{border-color:var(--azul);background:#E4EDF5}
+.soltar p{margin:0 0 16px;color:#3C556E}
+button{font-family:inherit;font-size:14px;font-weight:600;background:var(--tinta);color:#fff;border:0;border-radius:8px;padding:11px 20px;cursor:pointer}
+button:hover{background:var(--azul)}
+button[disabled]{opacity:.5;cursor:default}
+:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
+.resultado{margin-top:22px}
+.fila{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid #EEF1F5;font-size:14px}
+.fila:last-child{border:0}
+.fila .m{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums}
+.aviso{font-size:13.5px;color:#3C556E;margin-top:22px;padding-left:14px;border-left:3px solid var(--azul)}
+.mal{color:var(--mal)}
+ul{padding-left:20px;margin:10px 0 0}
+li{margin:3px 0;font-size:14px}
+code{background:#EEF1F5;padding:1px 6px;border-radius:4px;font-size:13px}
+</style>
+</head>
+<body>
+<header class="marca">
+  <img src="assets/logo-d3.png" alt="">
+  <div><b>Policía de Tucumán</b>Departamento Operaciones Policiales D-3 · Sección Estadística y Archivo</div>
+</header>
+
+<main>
+  <h1>Preparar la base para publicar</h1>
+  <p class="intro">Esta herramienta toma la base completa de accidentología y genera una copia que conserva
+  únicamente las columnas estadísticas que usa el sitio. Los datos personales de víctimas y causantes se
+  descartan antes de generar el archivo. Todo el proceso ocurre en esta computadora: nada se envía a internet.</p>
+
+  <div class="caja">
+    <div class="soltar" id="soltar">
+      <p>Arrastrá acá la base completa, o elegila desde tu equipo.</p>
+      <button id="btn">Elegir archivo Excel</button>
+      <input type="file" id="archivo" accept=".xlsx,.xlsm,.xls" hidden>
+    </div>
+    <div class="resultado" id="resultado"></div>
+  </div>
+
+  <div class="aviso">
+    El archivo que se descarga se llama <code>accidentologia.xlsx</code>. Copialo dentro de la carpeta
+    <code>datos/</code> del sitio, pisando el anterior, y publicá los cambios.
+  </div>
+</main>
+
+<script>
+const COLUMNAS = ['AÑO','MES','FECHA','ZONA HORARIA','DEPARTAMENTO','U.U.R.R.','DEPENDENCIA','ZONA',
+  'TIPO DE VIA','CAUSA','CATEGORIA DE SINIESTRO','TIPO DE SINIESTRO','PARTICIPANTE 12','PARTICIPANTE 23',
+  'SEXO','RANGO ETARIO','CONDICION DE LA VICTIMA','ILESO','HERIDOS LEVES','HERIDOS GRAVES',
+  'FALLECIDOS EN EL LUGAR ( 24 HS.)','FALLECIDOS LUEGO (+ DE 24 HS.)'];
+
+const clave = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+const nro = n => new Intl.NumberFormat('es-AR').format(n||0);
+const res = document.getElementById('resultado');
+const zona = document.getElementById('soltar');
+
+document.getElementById('btn').onclick = () => document.getElementById('archivo').click();
+document.getElementById('archivo').onchange = e => { if(e.target.files[0]) procesar(e.target.files[0]); };
+['dragenter','dragover'].forEach(ev => zona.addEventListener(ev, e => {e.preventDefault(); zona.classList.add('sobre');}));
+['dragleave','drop'].forEach(ev => zona.addEventListener(ev, e => {e.preventDefault(); zona.classList.remove('sobre');}));
+zona.addEventListener('drop', e => { if(e.dataTransfer.files[0]) procesar(e.dataTransfer.files[0]); });
+
+function procesar(file){
+  res.innerHTML = '<p>Leyendo el archivo…</p>';
+  const fr = new FileReader();
+  fr.onload = () => { setTimeout(()=>generar(fr.result, file.name), 30); };
+  fr.onerror = () => res.innerHTML = '<p class="mal">No se pudo leer el archivo.</p>';
+  fr.readAsArrayBuffer(file);
+}
+
+function generar(buf, nombre){
+  try{
+    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    const hoja = wb.SheetNames[0];
+    const filas = XLSX.utils.sheet_to_json(wb.Sheets[hoja], {header:1, raw:true, defval:null, blankrows:false});
+    if(!filas.length) throw new Error('la primera hoja está vacía');
+
+    const enc = filas[0].map(clave);
+    const idx = [], faltan = [];
+    COLUMNAS.forEach(c => {
+      const i = enc.indexOf(clave(c));
+      if(i < 0) faltan.push(c); else idx.push(i);
+    });
+    const descartadas = filas[0].length - idx.length;
+
+    const salida = filas.map(f => idx.map(i => f[i] === undefined ? null : f[i]));
+    const nueva = XLSX.utils.aoa_to_sheet(salida, {cellDates:true});
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, nueva, 'BASE');
+    XLSX.writeFile(libro, 'accidentologia.xlsx', {compression:true});
+
+    res.innerHTML = `
+      <div class="fila">Registros conservados<span class="m">${nro(filas.length-1)}</span></div>
+      <div class="fila">Columnas estadísticas publicadas<span class="m">${nro(idx.length)}</span></div>
+      <div class="fila">Columnas descartadas<span class="m">${nro(descartadas)}</span></div>
+      <p style="margin:16px 0 0">El archivo <b>accidentologia.xlsx</b> se descargó en tu carpeta de descargas.</p>
+      ${faltan.length ? `<p class="mal" style="margin-top:12px">No se encontraron estas columnas en la base, así que quedaron fuera:</p><ul class="mal">${faltan.map(c=>`<li>${c}</li>`).join('')}</ul>` : ''}`;
+  }catch(err){
+    res.innerHTML = '<p class="mal">El archivo no pudo interpretarse: ' + err.message + '</p>';
+  }
+}
+</script>
+</body>
+</html>
