@@ -40,7 +40,7 @@ principio de `app.js`.
 
 La página lee **únicamente** estas columnas:
 
-AÑO · MES · FECHA · ZONA HORARIA · DEPARTAMENTO · U.U.R.R. · DEPENDENCIA · ZONA ·
+AÑO · MES · FECHA · ZONA HORARIA · DEPARTAMENTO · LOCALIDAD · U.U.R.R. · DEPENDENCIA · ZONA ·
 TIPO DE VIA · CAUSA · CATEGORIA DE SINIESTRO · TIPO DE SINIESTRO · PARTICIPANTE 12 ·
 PARTICIPANTE 23 · SEXO · RANGO ETARIO · CONDICION DE LA VICTIMA · ILESO ·
 HERIDOS LEVES · HERIDOS GRAVES · FALLECIDOS EN EL LUGAR · FALLECIDOS LUEGO
@@ -52,6 +52,15 @@ color del vehículo, seguro, carnet y observaciones.
 > **Importante:** el archivo que se publica en `datos/` se puede descargar desde el sitio.
 > Por eso nunca hay que subir ahí la base completa, sino la copia depurada que genera
 > `preparar-base.html`. El archivo que viene en esta carpeta ya está depurado.
+
+## El mapa
+
+La sección "Mapa de siniestros por departamento y localidad" no lee ningún archivo
+externo: los límites de los 17 departamentos y las coordenadas de 19 localidades
+(las cabeceras de departamento y algunas ciudades más) están incluidos dentro de
+`app.js`, simplificados a partir de datos públicos del IGN y de BAHRA. Si en el futuro
+hace falta agregar más localidades al mapa, hay que sumarles coordenadas al objeto
+`MAPA_DATOS.localidades` dentro de `app.js`.
 
 ## Cómo cuenta la página
 

@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <style>
 :root{
   --tinta:#10243A;
@@ -22,10 +23,15 @@
   --papel:#EBEFF4;
   --linea:#D3DBE4;
   --blanco:#fff;
-  --ileso:#5B8C6A;
-  --leve:#C9971C;
-  --grave:#CC6B2A;
+  --ileso:#4E8B6C;
+  --leve:#E8B93A;
+  --grave:#DB6B2C;
   --fallecido:#A3232B;
+  --mapa-0:#EBEFF4;
+  --mapa-1:#B9D0E3;
+  --mapa-2:#6E9AC0;
+  --mapa-3:#2E5F8A;
+  --mapa-4:#10243A;
   --radio:10px;
   --sombra:0 1px 2px rgba(16,36,58,.08), 0 6px 18px rgba(16,36,58,.06);
   --rail:320px;
@@ -44,18 +50,33 @@ button{font-family:inherit; font-size:inherit; color:inherit; cursor:pointer}
 :focus-visible{outline:2px solid var(--azul); outline-offset:2px; border-radius:4px}
 
 /* ---------- cabecera institucional ---------- */
-.marca{background:var(--tinta); color:#fff}
-.marca-in{max-width:1500px; margin:0 auto; padding:14px 20px; display:flex; gap:14px; align-items:center}
-.marca img{height:52px; width:auto; flex:none}
-.marca .org{font-size:12.5px; line-height:1.35; color:#B9C9D9}
-.marca .org b{display:block; color:#fff; font-weight:600; font-size:13.5px; letter-spacing:.01em}
-.marca .sello{margin-left:auto; font-size:11.5px; color:#8FA6BC; text-align:right; line-height:1.4}
+.marca{background:linear-gradient(105deg,#050B14 0%,#0E2038 38%,#1C4066 78%,#265480 100%); color:#fff}
+.marca-in{max-width:1500px; margin:0 auto; padding:12px 20px; display:flex; gap:18px; align-items:center}
+.marca .grupo-izq{display:flex; align-items:center; gap:14px; flex:none}
+.marca .grupo-der{display:flex; align-items:center; gap:12px; flex:none; margin-left:auto}
+.marca img{height:56px; width:auto; flex:none; display:block}
+.marca .grupo-der img{height:50px}
+.marca .rotulo{min-width:0}
+.marca .rotulo h2{font-size:clamp(17px,2.6vw,26px); font-weight:800; letter-spacing:.01em; color:#fff; white-space:nowrap}
+.marca .rotulo p{margin:2px 0 0; font-size:clamp(9.5px,1.35vw,12.5px); color:#AFC3D9; letter-spacing:.015em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+@media (max-width:640px){
+  .marca-in{gap:10px}
+  .marca .grupo-izq{gap:9px}
+  .marca img{height:38px} .marca .grupo-der img{height:32px}
+  .marca .grupo-der{gap:7px}
+}
 
 /* ---------- portada ---------- */
 .portada{background:var(--blanco); border-bottom:1px solid var(--linea)}
-.portada-in{max-width:1500px; margin:0 auto; padding:30px 20px 24px}
-.portada h1{font-size:clamp(28px,4.6vw,46px); font-weight:800; max-width:16ch}
-.portada p.bajada{margin:12px 0 0; max-width:62ch; color:var(--tinta-70); font-size:16px}
+.portada-in{max-width:1500px; margin:0 auto; padding:26px 20px 22px}
+.portada h1{font-size:clamp(22px,3.1vw,32px); font-weight:800; max-width:24ch}
+.portada p.bajada{margin:10px 0 0; max-width:62ch; color:var(--tinta-70); font-size:15px}
+.titular{display:flex; justify-content:space-between; align-items:flex-start; gap:20px; flex-wrap:wrap}
+.btn-pdf{display:inline-flex; align-items:center; gap:7px; flex:none; background:var(--tinta); color:#fff;
+  border:0; border-radius:8px; padding:9px 15px; font-size:13.5px; font-weight:600; white-space:nowrap; margin-top:2px}
+.btn-pdf:hover{background:var(--azul)}
+.btn-pdf svg{flex:none}
 .periodo{display:inline-flex; align-items:center; gap:8px; margin-top:18px; padding:6px 12px;
   background:var(--azul-claro); color:var(--tinta); border-radius:999px; font-size:13.5px; font-weight:500}
 .periodo .pt{width:7px; height:7px; border-radius:50%; background:var(--azul)}
@@ -137,6 +158,29 @@ button{font-family:inherit; font-size:inherit; color:inherit; cursor:pointer}
 .lienzo.bajo{height:210px}
 .vacio{display:flex; align-items:center; justify-content:center; height:100%; color:var(--tinta-45); font-size:13.5px; text-align:center; padding:0 20px}
 
+/* ---------- mapa ---------- */
+.mapa-caja{display:flex; gap:22px; flex-wrap:wrap; align-items:flex-start}
+.mapa-svg{flex:1 1 320px; min-width:0}
+.mapa-svg svg{width:100%; height:auto; display:block; max-height:560px}
+.mapa-svg path{stroke:#fff; stroke-width:1.1; transition:opacity .15s; cursor:default}
+.mapa-svg path:hover{opacity:.82}
+.mapa-svg .burbuja{fill:var(--oro); fill-opacity:.5; stroke:#8a6a10; stroke-width:1; cursor:default}
+.mapa-svg .burbuja:hover{fill-opacity:.75}
+.mapa-svg .etq-depto{font-size:9px; fill:var(--tinta); opacity:.55; pointer-events:none; text-anchor:middle}
+.mapa-panel{flex:1 1 220px; min-width:200px}
+.mapa-panel h4{font-size:12.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--tinta-45); margin:0 0 10px}
+.mapa-escala{display:flex; align-items:center; gap:0; margin-bottom:6px; border-radius:4px; overflow:hidden}
+.mapa-escala span{flex:1; height:12px}
+.mapa-escala-et{display:flex; justify-content:space-between; font-size:11px; color:var(--tinta-45); margin-bottom:20px}
+.mapa-lista{list-style:none; margin:0; padding:0}
+.mapa-lista-scroll{max-height:260px; overflow-y:auto; border:1px solid #EEF1F5; border-radius:6px; padding:0 8px}
+.mapa-lista li{display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid #EEF1F5; font-size:13px}
+.mapa-lista li:last-child{border:0}
+.mapa-lista .pt{width:9px; height:9px; border-radius:50%; background:var(--oro); flex:none}
+.mapa-lista .nm{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.mapa-lista .vl{font-weight:700; font-variant-numeric:tabular-nums}
+.mapa-nota{font-size:11.5px; color:var(--tinta-45); margin-top:14px; line-height:1.5}
+
 /* ---------- pie ---------- */
 .pie{background:var(--tinta); color:#B9C9D9; font-size:13px}
 .pie-in{max-width:1500px; margin:0 auto; padding:26px 20px 34px; display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
@@ -177,13 +221,35 @@ button{font-family:inherit; font-size:inherit; color:inherit; cursor:pointer}
   .lienzo{height:250px} .lienzo.alto{height:400px}
 }
 @media (prefers-reduced-motion:reduce){ *{animation-duration:.01ms!important; transition-duration:.01ms!important} }
+
+/* ---------- impresión / PDF ---------- */
+.solo-impresion{display:none}
+@media print{
+  @page{ margin:14mm 12mm }
+  body{background:#fff}
+  .abrir-filtros, .rail, .btn-pdf, .limpiar, .chip button{display:none!important}
+  .marco{display:block; padding:0}
+  .contenido{padding:0}
+  .marca{background:var(--tinta)!important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  .portada-in{padding:14px 0}
+  .cinta{margin-top:16px}
+  .kpis{grid-template-columns:repeat(3,1fr)}
+  .kpi, .tarjeta{box-shadow:none; border:1px solid #C7D0DA; break-inside:avoid}
+  .seccion{break-inside:avoid-page}
+  .rejilla{grid-template-columns:repeat(2,1fr)}
+  .tarjeta.ancha{grid-column:1/-1}
+  .lienzo{height:220px} .lienzo.alto{height:260px}
+  .solo-impresion{display:block; font-size:11.5px; color:var(--tinta-70); margin:2px 0 16px}
+  .pie{background:#fff!important; color:var(--tinta-70)!important; border-top:1px solid #C7D0DA}
+  .pie b{color:var(--tinta)!important}
+}
 </style>
 </head>
 <body>
 
 <div class="carga" id="carga">
   <div class="carga-caja">
-    <img src="assets/logo-d3.png" alt="">
+    <img src="assets/escudo-policia.png" alt="">
     <h2 id="carga-t">Cargando estadísticas</h2>
     <p id="carga-p">Leyendo la base de datos de siniestros viales.</p>
     <div class="progreso" id="carga-barra"><i></i></div>
@@ -200,19 +266,32 @@ button{font-family:inherit; font-size:inherit; color:inherit; cursor:pointer}
 
 <header class="marca">
   <div class="marca-in">
-    <img src="assets/logo-d3.png" alt="Escudo del Departamento Operaciones Policiales D-3">
-    <div class="org">
-      <b>Policía de Tucumán</b>
-      Departamento Operaciones Policiales D-3 · Sección Estadística y Archivo
+    <div class="grupo-izq">
+      <img src="assets/escudo-policia.png" alt="Escudo de la Policía de Tucumán">
+      <div class="rotulo">
+        <h2>POLICÍA DE TUCUMÁN</h2>
+        <p>DEPARTAMENTO OPERACIONES POLICIALES D3 · SECCIÓN ESTADÍSTICA Y ARCHIVO</p>
+      </div>
     </div>
-    <div class="sello">Datos públicos<br>Sin información personal</div>
+    <div class="grupo-der">
+      <img src="assets/escudo-d3.png" alt="Escudo del Departamento Operaciones Policiales D-3">
+      <img src="assets/logo-estadistica.png" alt="Sello de la Sección Estadística y Archivo">
+    </div>
   </div>
 </header>
 
 <section class="portada">
   <div class="portada-in">
-    <h1>Siniestros viales en la provincia de Tucumán</h1>
-    <p class="bajada">Consulta pública de los siniestros viales registrados por las dependencias policiales de la provincia. Filtrá por período, jurisdicción y características del hecho para armar tu propia lectura de los datos.</p>
+    <div class="titular">
+      <div>
+        <h1>Siniestros viales en la provincia de Tucumán</h1>
+        <p class="bajada">Consulta pública de los siniestros viales registrados por las dependencias policiales de la provincia. Filtrá por período, jurisdicción y características del hecho para armar tu propia lectura de los datos.</p>
+      </div>
+      <button class="btn-pdf" id="btn-pdf" title="Genera un PDF con los filtros y gráficos actuales">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
+        Descargar PDF
+      </button>
+    </div>
     <div class="periodo"><span class="pt"></span><span id="periodo-txt">—</span></div>
 
     <div class="cinta">
@@ -241,6 +320,7 @@ button{font-family:inherit; font-size:inherit; color:inherit; cursor:pointer}
   </aside>
 
   <main class="contenido">
+    <p class="solo-impresion" id="pie-impresion"></p>
     <div class="chips" id="chips"></div>
     <div class="kpis" id="kpis"></div>
     <div id="secciones"></div>
