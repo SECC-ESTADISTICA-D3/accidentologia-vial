@@ -162,6 +162,30 @@ function leerArchivoLocal(file){
   fr.readAsArrayBuffer(file);
 }
 
+/* ---------- modal "Presentación" ---------- */
+(function(){
+  const btnAbrir = document.getElementById('btn-presentacion');
+  const btnCerrar = document.getElementById('modal-presentacion-cerrar');
+  const modal = document.getElementById('modal-presentacion');
+  if(!btnAbrir || !modal) return;
+  let ultimoFoco = null;
+  function abrir(){
+    ultimoFoco = document.activeElement;
+    modal.classList.add('visible');
+    document.body.style.overflow = 'hidden';
+    btnCerrar.focus();
+  }
+  function cerrar(){
+    modal.classList.remove('visible');
+    document.body.style.overflow = '';
+    if(ultimoFoco) ultimoFoco.focus();
+  }
+  btnAbrir.addEventListener('click', abrir);
+  btnCerrar.addEventListener('click', cerrar);
+  modal.addEventListener('click', e => { if(e.target === modal) cerrar(); });
+  document.addEventListener('keydown', e => { if(e.key === 'Escape' && modal.classList.contains('visible')) cerrar(); });
+})();
+
 let DATOS = [], ANIOS = [], ACTUALIZADO = '';
 const DEPTO_NOMBRE = {}, LOC_NOMBRE = {};
 

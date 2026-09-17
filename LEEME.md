@@ -71,6 +71,21 @@ hace falta agregar más localidades al mapa, hay que sumarles coordenadas al obj
 - **Gráficos de víctimas** (sexo, rango etario, condición): cuentan registros de víctimas,
   es decir cada fila con datos de la persona damnificada.
 
+## Botón "Presentación"
+
+Junto a "Descargar PDF" hay un botón "Presentación" que abre una ventana con los datos
+institucionales del proyecto (supervisión, ejecución y operadores de datos). Su contenido
+está escrito directamente en `index.html`, dentro del bloque `<div class="modal-fondo"
+id="modal-presentacion">`. Para actualizar nombres o cargos, editá ese bloque a mano.
+
+## Rendimiento
+
+Los logos institucionales en `assets/` están recortados al tamaño real en que se muestran
+(no hace falta que sean más grandes: aunque se peguen fotos de mayor resolución ahí, conviene
+redimensionarlas antes, porque el navegador igual las va a mostrar del mismo tamaño chico).
+Los scripts externos (`xlsx`, `chart.js`, `chartjs-plugin-datalabels`) y `app.js` se cargan
+con el atributo `defer` para no bloquear el primer dibujo de la página mientras se descargan.
+
 ## Publicación
 
 Subí el contenido de esta carpeta a la raíz del repositorio y activá GitHub Pages.
