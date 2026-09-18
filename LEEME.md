@@ -79,6 +79,13 @@ cortado por el borde del gráfico. Si en el futuro los valores crecen mucho (muc
 más dígitos), se puede agrandar ese margen en `pintarFicha()` (app.js), en las
 propiedades `layout.padding` y `grace` de cada eje.
 
+Al seleccionar el departamento **Capital**, como en la práctica es una sola localidad
+(San Miguel de Tucumán), la tarjeta muestra en su lugar el desglose por **jurisdicción
+policial** (campo `dependencia` de la base). El resto de los departamentos sigue
+mostrando localidades como siempre. Ese comportamiento está en `pintarMapa()` (app.js),
+en la constante `DEPTO_JURISDICCION = 'CAPITAL'`: si en algún momento se quisiera aplicar
+lo mismo a otro departamento, o revertirlo, se cambia ahí.
+
 ## Mapa interactivo
 
 Al tocar o hacer clic en un departamento del mapa se despliega una tarjeta con el listado

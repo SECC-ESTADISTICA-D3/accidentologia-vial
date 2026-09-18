@@ -283,6 +283,7 @@ function armarDatos(filas){
    2. Filtros
    ============================================================= */
 const SEGMENTADORES = [
+  {campo:'causa',       etiqueta:'Carátula de la causa',    orden:'cantidad'},
   {campo:'anio',        etiqueta:'Año',                     orden:'natural'},
   {campo:'mes',         etiqueta:'Mes',                     orden:'mes'},
   {campo:'uurr',        etiqueta:'Unidad Regional',         orden:'cantidad'},
@@ -292,11 +293,16 @@ const SEGMENTADORES = [
   {campo:'zonaHoraria', etiqueta:'Franja horaria',          orden:'cantidad'},
   {campo:'tipoVia',     etiqueta:'Tipo de vía',             orden:'cantidad'},
   {campo:'tipoSin',     etiqueta:'Tipo de siniestro',       orden:'cantidad'},
-  {campo:'causa',       etiqueta:'Carátula de la causa',    orden:'cantidad'},
   {campo:'sexo',        etiqueta:'Sexo de la víctima',      orden:'cantidad'},
   {campo:'p12',         etiqueta:'Movilidad de la víctima', orden:'cantidad'},
   {campo:'p23',         etiqueta:'Movilidad del causante',  orden:'cantidad'}
 ];
+
+/* Carátulas de causa que implican víctimas fatales: cuando son las únicas
+   seleccionadas en el filtro "Carátula de la causa", el mapa cambia a una
+   paleta amarillo→rojo para destacar que se trata de víctimas fatales. */
+const CAUSAS_FATALES = ['FALLECIMIENTO', 'HOMICIDIO CULPOSO', 'LESIONES A FALLECIMIENTO',
+  'LESIONES CULPOSAS A HOMICIDIO CULPOSO'].map(lindo);
 
 const seleccion = {};            // campo -> Set de valores
 SEGMENTADORES.forEach(s => seleccion[s.campo] = new Set());
@@ -532,6 +538,8 @@ function pintarMapa(f, filas){
   const porDepto = new Map();
   const porLoc = new Map();
   const porLocPorDepto = new Map(); // deptoKey -> Map(locKey -> n)
+  const porDepPorDepto = new Map(); // deptoKey -> Map(dependencia -> n), usado solo para CAPITAL
+  const DEPTO_JURISDICCION = 'CAPITAL'; // departamento que se desglosa por jurisdicción en vez de por localidad
   for(const d of base){
     const dk = d.depto ? clave(d.depto) : null;
     if(dk) porDepto.set(dk, (porDepto.get(dk)||0) + 1);
@@ -542,6 +550,14 @@ function pintarMapa(f, filas){
       const m = porLocPorDepto.get(dk);
       m.set(lk, (m.get(lk)||0) + 1);
     }
+    // Capital es una sola localidad (San Miguel de Tucumán), así que ahí no tiene
+    // sentido desglosar por localidad: se guarda también por jurisdicción policial
+    // para poder mostrar eso en su lugar al seleccionar el departamento.
+    if(dk && d.dependencia){
+      if(!porDepPorDepto.has(dk)) porDepPorDepto.set(dk, new Map());
+      const m2 = porDepPorDepto.get(dk);
+      m2.set(d.dependencia, (m2.get(d.dependencia)||0) + 1);
+    }
   }
 
   if(!base.length){
@@ -549,22 +565,32 @@ function pintarMapa(f, filas){
     return;
   }
 
+  // Modo "víctimas fatales": si el filtro de Carátula de la causa tiene
+  // seleccionadas únicamente carátulas que implican fallecimiento, el mapa
+  // usa una paleta amarillo→rojo en lugar de la paleta azul habitual.
+  const modoFatal = seleccion.causa.size > 0 &&
+    [...seleccion.causa].every(v => CAUSAS_FATALES.includes(v));
+  const escala = modoFatal
+    ? ['var(--mapa-fatal-0)','var(--mapa-fatal-1)','var(--mapa-fatal-2)','var(--mapa-fatal-3)','var(--mapa-fatal-4)']
+    : ['var(--mapa-0)','var(--mapa-1)','var(--mapa-2)','var(--mapa-3)','var(--mapa-4)'];
+
   const maxDepto = Math.max(1, ...[...porDepto.values()]);
   const escalaColor = n => {
     const p = n / maxDepto;
-    if(n === 0) return 'var(--mapa-0)';
-    if(p < .15) return 'var(--mapa-1)';
-    if(p < .40) return 'var(--mapa-2)';
-    if(p < .70) return 'var(--mapa-3)';
-    return 'var(--mapa-4)';
+    if(n === 0) return escala[0];
+    if(p < .15) return escala[1];
+    if(p < .40) return escala[2];
+    if(p < .70) return escala[3];
+    return escala[4];
   };
 
   const [vx,vy,vw,vh] = MAPA_DATOS.viewBox;
   const paths = Object.entries(MAPA_DATOS.deptos).map(([k,v]) => {
     const n = porDepto.get(k) || 0;
     const nombre = DEPTO_NOMBRE[k] || v.cab || k;
+    const verQue = k === DEPTO_JURISDICCION ? 'jurisdicciones policiales' : 'localidades';
     return `<path d="${v.d}" fill="${escalaColor(n)}" data-depto="${k}" tabindex="0" role="button"
-      aria-label="${esc(nombre)}: ${nro(n)} siniestro${n===1?'':'s'}. Tocar para ver localidades."><title>${esc(nombre)}: ${nro(n)} siniestro${n===1?'':'s'}</title></path>`;
+      aria-label="${esc(nombre)}: ${nro(n)} siniestro${n===1?'':'s'}. Tocar para ver ${verQue}."><title>${esc(nombre)}: ${nro(n)} siniestro${n===1?'':'s'}</title></path>`;
   }).join('');
 
   const deptosConDato = Object.entries(MAPA_DATOS.deptos)
@@ -593,11 +619,14 @@ function pintarMapa(f, filas){
       <div class="mapa-detalle" id="mapa-detalle-${f.id}"></div>
     </div>
     <div class="mapa-panel">
+      ${modoFatal ? `<p class="mapa-badge-fatal">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+        Víctimas fatales</p>` : ''}
       <h4>Siniestros por departamento</h4>
       <div class="mapa-escala">
-        <span style="background:var(--mapa-0)"></span><span style="background:var(--mapa-1)"></span>
-        <span style="background:var(--mapa-2)"></span><span style="background:var(--mapa-3)"></span>
-        <span style="background:var(--mapa-4)"></span>
+        <span style="background:${escala[0]}"></span><span style="background:${escala[1]}"></span>
+        <span style="background:${escala[2]}"></span><span style="background:${escala[3]}"></span>
+        <span style="background:${escala[4]}"></span>
       </div>
       <div class="mapa-escala-et"><span>Menos</span><span>Más (máx. ${nro(maxDepto)})</span></div>
       <ul class="mapa-lista mapa-lista-scroll">
@@ -607,7 +636,8 @@ function pintarMapa(f, filas){
       </ul>
       <p class="mapa-ayuda">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5"/><path d="M12 8h.01"/></svg>
-        Tocá o hacé clic en un departamento del mapa para ver sus localidades.
+        Tocá o hacé clic en un departamento del mapa para ver sus localidades
+        (en Capital, se muestran las jurisdicciones policiales).
       </p>
       <h4 style="margin-top:18px">Localidades</h4>
       <ul class="mapa-lista mapa-lista-scroll">
@@ -645,9 +675,14 @@ function pintarMapa(f, filas){
 
     const nombre = nombreDepto(k);
     const total = porDepto.get(k) || 0;
-    const locs = [...(porLocPorDepto.get(k) || new Map()).entries()]
-      .map(([lk, n]) => ({lk, n, nombre: LOC_NOMBRE[lk] || lk}))
-      .sort((a,b) => b.n - a.n || a.nombre.localeCompare(b.nombre,'es'));
+    const esJurisdiccion = k === DEPTO_JURISDICCION;
+    const items = esJurisdiccion
+      ? [...(porDepPorDepto.get(k) || new Map()).entries()]
+          .map(([nombreDep, n]) => ({n, nombre: nombreDep}))
+      : [...(porLocPorDepto.get(k) || new Map()).entries()]
+          .map(([lk, n]) => ({n, nombre: LOC_NOMBRE[lk] || lk}));
+    items.sort((a,b) => b.n - a.n || a.nombre.localeCompare(b.nombre,'es'));
+    const etiqueta = esJurisdiccion ? 'jurisdicción policial' : 'localidad';
 
     detalle.innerHTML = `
       <div class="mapa-detalle-cab">
@@ -657,12 +692,13 @@ function pintarMapa(f, filas){
         </button>
       </div>
       <p class="mapa-detalle-total">${nro(total)} siniestro${total===1?'':'s'} en el departamento</p>
+      ${esJurisdiccion ? '<p class="mapa-detalle-sub">Por jurisdicción policial</p>' : ''}
       <ul class="mapa-lista mapa-lista-scroll">
-        ${locs.length
-          ? locs.map(o => `<li><span class="pt"></span><span class="nm">${esc(o.nombre)}</span><span class="vl">${nro(o.n)}</span></li>`).join('')
+        ${items.length
+          ? items.map(o => `<li><span class="pt"></span><span class="nm">${esc(o.nombre)}</span><span class="vl">${nro(o.n)}</span></li>`).join('')
           : ''}
       </ul>
-      ${locs.length ? '' : '<p class="vacio">No hay localidad registrada para los siniestros de este departamento.</p>'}
+      ${items.length ? '' : `<p class="vacio">No hay ${etiqueta} registrada para los siniestros de este departamento.</p>`}
     `;
     detalle.classList.add('visible');
     detalle.querySelector('.mapa-detalle-cerrar').addEventListener('click', cerrarDetalle);
