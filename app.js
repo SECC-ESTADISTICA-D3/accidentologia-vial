@@ -186,6 +186,12 @@ function leerArchivoLocal(file){
   document.addEventListener('keydown', e => { if(e.key === 'Escape' && modal.classList.contains('visible')) cerrar(); });
 })();
 
+/* ---------- detalle de departamento en el mapa (estado compartido) ---------- */
+let mapaCerrarActivo = null;
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && mapaCerrarActivo) mapaCerrarActivo();
+});
+
 let DATOS = [], ANIOS = [], ACTUALIZADO = '';
 const DEPTO_NOMBRE = {}, LOC_NOMBRE = {};
 
@@ -435,22 +441,6 @@ function totales(filas){
   return t;
 }
 
-function pintarCinta(t){
-  const partes = [
-    ['b-ileso', t.il], ['b-leve', t.hl], ['b-grave', t.hg], ['b-fallecido', t.fa]
-  ];
-  const tot = t.per || 1;
-  document.getElementById('cinta-n').textContent = nro(t.per);
-  document.getElementById('barra').innerHTML = partes
-    .map(([c,v]) => `<span class="${c}" style="width:${(v/tot*100).toFixed(2)}%"></span>`).join('');
-  const eti = [
-    ['l-ileso','Ilesas', t.il], ['l-leve','Con lesiones leves', t.hl],
-    ['l-grave','Con lesiones graves', t.hg], ['l-fallecido','Fallecidas', t.fa]
-  ];
-  document.getElementById('leyenda').innerHTML = eti.map(([c,k,v]) =>
-    `<div class="${c}"><div class="v">${nro(v)}</div><div class="k">${k} · ${(v/tot*100).toFixed(1)}%</div></div>`).join('');
-}
-
 function pintarKpis(filas, t){
   // variación entre los dos años más recientes presentes en la selección
   const presentes = [...new Set(filas.map(d=>d.anio))].sort();
@@ -541,9 +531,17 @@ function pintarMapa(f, filas){
 
   const porDepto = new Map();
   const porLoc = new Map();
+  const porLocPorDepto = new Map(); // deptoKey -> Map(locKey -> n)
   for(const d of base){
-    if(d.depto) porDepto.set(clave(d.depto), (porDepto.get(clave(d.depto))||0) + 1);
+    const dk = d.depto ? clave(d.depto) : null;
+    if(dk) porDepto.set(dk, (porDepto.get(dk)||0) + 1);
     if(d.localidad) porLoc.set(clave(d.localidad), (porLoc.get(clave(d.localidad))||0) + 1);
+    if(dk && d.localidad){
+      const lk = clave(d.localidad);
+      if(!porLocPorDepto.has(dk)) porLocPorDepto.set(dk, new Map());
+      const m = porLocPorDepto.get(dk);
+      m.set(lk, (m.get(lk)||0) + 1);
+    }
   }
 
   if(!base.length){
@@ -564,12 +562,13 @@ function pintarMapa(f, filas){
   const [vx,vy,vw,vh] = MAPA_DATOS.viewBox;
   const paths = Object.entries(MAPA_DATOS.deptos).map(([k,v]) => {
     const n = porDepto.get(k) || 0;
-    const nombre = DEPTO_NOMBRE[k] || k;
-    return `<path d="${v.d}" fill="${escalaColor(n)}"><title>${esc(nombre)}: ${nro(n)} siniestro${n===1?'':'s'}</title></path>`;
+    const nombre = DEPTO_NOMBRE[k] || v.cab || k;
+    return `<path d="${v.d}" fill="${escalaColor(n)}" data-depto="${k}" tabindex="0" role="button"
+      aria-label="${esc(nombre)}: ${nro(n)} siniestro${n===1?'':'s'}. Tocar para ver localidades."><title>${esc(nombre)}: ${nro(n)} siniestro${n===1?'':'s'}</title></path>`;
   }).join('');
 
   const deptosConDato = Object.entries(MAPA_DATOS.deptos)
-    .map(([k,v]) => ({k, n: porDepto.get(k) || 0, nombre: DEPTO_NOMBRE[k] || k}))
+    .map(([k,v]) => ({k, n: porDepto.get(k) || 0, nombre: DEPTO_NOMBRE[k] || v.cab || k}))
     .sort((a,b) => b.n - a.n);
 
   const localesConDato = Object.entries(MAPA_DATOS.localidades)
@@ -588,9 +587,10 @@ function pintarMapa(f, filas){
 
   cont.innerHTML = `
     <div class="mapa-svg">
-      <svg viewBox="${vx} ${vy} ${vw} ${vh}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Mapa de siniestros viales por departamento y localidad">
+      <svg viewBox="${vx} ${vy} ${vw} ${vh}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Mapa de siniestros viales por departamento y localidad. Tocá un departamento para ver sus localidades.">
         ${paths}${burbujas}
       </svg>
+      <div class="mapa-detalle" id="mapa-detalle-${f.id}"></div>
     </div>
     <div class="mapa-panel">
       <h4>Siniestros por departamento</h4>
@@ -605,6 +605,10 @@ function pintarMapa(f, filas){
           `<li><span class="pt" style="background:${escalaColor(o.n)}"></span><span class="nm">${esc(o.nombre)}</span><span class="vl">${nro(o.n)}</span></li>`
         ).join('')}
       </ul>
+      <p class="mapa-ayuda">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5"/><path d="M12 8h.01"/></svg>
+        Tocá o hacé clic en un departamento del mapa para ver sus localidades.
+      </p>
       <h4 style="margin-top:18px">Localidades</h4>
       <ul class="mapa-lista mapa-lista-scroll">
         ${localesConDato.map(o =>
@@ -615,6 +619,72 @@ function pintarMapa(f, filas){
       localidades con coordenadas disponibles, a mayor tamaño más registros. Límites simplificados con fines
       ilustrativos (fuente: IGN / BAHRA).</p>
     </div>`;
+
+  /* ---- interacción: click/tap en un departamento despliega sus localidades ---- */
+  const svgCont = cont.querySelector('.mapa-svg');
+  const svgEl = svgCont.querySelector('svg');
+  const detalle = document.getElementById('mapa-detalle-' + f.id);
+  let deptoActivo = null;
+
+  function nombreDepto(k){
+    const v = MAPA_DATOS.deptos[k];
+    return DEPTO_NOMBRE[k] || (v && v.cab) || k;
+  }
+
+  function cerrarDetalle(){
+    deptoActivo = null;
+    detalle.classList.remove('visible');
+    detalle.innerHTML = '';
+    svgEl.querySelectorAll('path.seleccionado').forEach(p => p.classList.remove('seleccionado'));
+  }
+
+  function abrirDetalle(k, path){
+    deptoActivo = k;
+    svgEl.querySelectorAll('path.seleccionado').forEach(p => p.classList.remove('seleccionado'));
+    if(path) path.classList.add('seleccionado');
+
+    const nombre = nombreDepto(k);
+    const total = porDepto.get(k) || 0;
+    const locs = [...(porLocPorDepto.get(k) || new Map()).entries()]
+      .map(([lk, n]) => ({lk, n, nombre: LOC_NOMBRE[lk] || lk}))
+      .sort((a,b) => b.n - a.n || a.nombre.localeCompare(b.nombre,'es'));
+
+    detalle.innerHTML = `
+      <div class="mapa-detalle-cab">
+        <h5>${esc(nombre)}</h5>
+        <button type="button" class="mapa-detalle-cerrar" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <p class="mapa-detalle-total">${nro(total)} siniestro${total===1?'':'s'} en el departamento</p>
+      <ul class="mapa-lista mapa-lista-scroll">
+        ${locs.length
+          ? locs.map(o => `<li><span class="pt"></span><span class="nm">${esc(o.nombre)}</span><span class="vl">${nro(o.n)}</span></li>`).join('')
+          : ''}
+      </ul>
+      ${locs.length ? '' : '<p class="vacio">No hay localidad registrada para los siniestros de este departamento.</p>'}
+    `;
+    detalle.classList.add('visible');
+    detalle.querySelector('.mapa-detalle-cerrar').addEventListener('click', cerrarDetalle);
+  }
+
+  svgEl.addEventListener('click', e => {
+    const path = e.target.closest('path[data-depto]');
+    if(!path){ if(deptoActivo) cerrarDetalle(); return; }
+    const k = path.dataset.depto;
+    if(deptoActivo === k) cerrarDetalle();
+    else abrirDetalle(k, path);
+  });
+  svgEl.addEventListener('keydown', e => {
+    if(e.key !== 'Enter' && e.key !== ' ') return;
+    const path = e.target.closest('path[data-depto]');
+    if(!path) return;
+    e.preventDefault();
+    const k = path.dataset.depto;
+    if(deptoActivo === k) cerrarDetalle();
+    else abrirDetalle(k, path);
+  });
+  mapaCerrarActivo = cerrarDetalle;
 }
 
 function pintarFicha(f, filas, anios){
@@ -679,6 +749,10 @@ function pintarFicha(f, filas, anios){
       indexAxis: horizontal ? 'y' : 'x',
       interaction:{mode:'index', intersect:false},
       animation:{duration: 320},
+      // deja aire de sobra alrededor de las barras para que la etiqueta con el
+      // número (que se dibuja pegada a la punta de la barra) siempre entre
+      // completa y no quede cortada por el borde del gráfico
+      layout:{padding: horizontal ? {top:4, right:40, bottom:4, left:4} : {top:24, right:8, bottom:4, left:4}},
       plugins:{
         legend:{display: anios.length > 1, position:'bottom',
           labels:{boxWidth:10, boxHeight:10, usePointStyle:true, pointStyle:'rectRounded', padding:14}},
@@ -694,10 +768,14 @@ function pintarFicha(f, filas, anios){
       },
       scales:{
         x:{ grid:{display:horizontal, color:'#EEF1F5'}, border:{display:false},
+            // "grace" agranda el máximo del eje un poco más allá del dato más alto,
+            // así la etiqueta de la barra más larga tiene lugar antes del borde
+            ...(horizontal ? {grace:'14%'} : {}),
             ticks:{autoSkip:!horizontal, maxRotation: horizontal?0:45, minRotation:0,
                    callback:function(v){ const l = this.getLabelForValue(v);
                      return horizontal ? nro(v) : (String(l).length > 16 ? String(l).slice(0,15)+'…' : l); }}},
         y:{ beginAtZero:true, grid:{display:!horizontal, color:'#EEF1F5'}, border:{display:false},
+            ...(horizontal ? {} : {grace:'14%'}),
             ticks:{ callback:function(v){ const l = this.getLabelForValue(v);
                      return horizontal ? (String(l).length > 26 ? String(l).slice(0,25)+'…' : l) : nro(v); }}}
       }
@@ -712,12 +790,8 @@ function actualizar(){
   const filas = filtrar();
   const t = totales(filas);
   refrescarPanel();
-  pintarCinta(t);
   pintarKpis(filas, t);
   pintarGraficos(filas);
-  document.getElementById('cinta-et').textContent = t.sin
-    ? `personas involucradas en ${nro(t.sin)} siniestros viales`
-    : 'no hay siniestros que cumplan con los filtros seleccionados';
 }
 
 const btnPdf = document.getElementById('btn-pdf');

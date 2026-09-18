@@ -71,6 +71,23 @@ hace falta agregar más localidades al mapa, hay que sumarles coordenadas al obj
 - **Gráficos de víctimas** (sexo, rango etario, condición): cuentan registros de víctimas,
   es decir cada fila con datos de la persona damnificada.
 
+## Etiquetas de los gráficos de barra
+
+Los gráficos dejan un margen extra (arriba en los verticales, a la derecha en los
+horizontales) para que el número que acompaña a la barra más alta/larga no quede
+cortado por el borde del gráfico. Si en el futuro los valores crecen mucho (muchos
+más dígitos), se puede agrandar ese margen en `pintarFicha()` (app.js), en las
+propiedades `layout.padding` y `grace` de cada eje.
+
+## Mapa interactivo
+
+Al tocar o hacer clic en un departamento del mapa se despliega una tarjeta con el listado
+de sus localidades y la cantidad de siniestros de cada una (ordenadas de mayor a menor).
+Se cierra tocando el mismo departamento de nuevo, el botón ✕, la tecla Escape, o tocando
+un área vacía del mapa. Esa relación depto→localidad sale de los mismos registros
+filtrados (no depende de que la localidad tenga coordenadas en el mapa), así que aparecen
+todas las localidades cargadas para ese departamento, tengan o no burbuja dibujada.
+
 ## Botón "Presentación"
 
 Junto a "Descargar PDF" hay un botón "Presentación" que abre una ventana con los datos
