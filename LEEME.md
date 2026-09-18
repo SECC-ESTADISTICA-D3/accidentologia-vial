@@ -62,6 +62,16 @@ externo: los límites de los 17 departamentos y las coordenadas de 19 localidade
 hace falta agregar más localidades al mapa, hay que sumarles coordenadas al objeto
 `MAPA_DATOS.localidades` dentro de `app.js`.
 
+Cuando en el filtro **Carátula de la causa** quedan seleccionadas únicamente carátulas
+que implican muerte (FALLECIMIENTO, HOMICIDIO CULPOSO, LESIONES A FALLECIMIENTO,
+LESIONES CULPOSAS A HOMICIDIO CULPOSO), el mapa entra en modo "víctimas fatales": además
+de cambiar a la paleta amarillo→rojo, muestra **dos columnas** en las listas de
+departamentos, de localidades y en el detalle de cada departamento. La primera es la
+cantidad de siniestros y la segunda, en rojo, la cantidad de **personas fallecidas**
+(FALLECIDOS EN EL LUGAR + FALLECIDOS LUEGO de la fila cabecera del hecho). Los globos
+de ayuda del mapa muestran los dos datos. La lista de carátulas fatales está en la
+constante `CAUSAS_FATALES` de `app.js`.
+
 ## Cómo cuenta la página
 
 - **Siniestros**: filas que tienen cargada la columna CAUSA, es decir la fila cabecera de

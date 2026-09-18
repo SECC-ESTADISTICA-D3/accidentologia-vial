@@ -539,24 +539,38 @@ function pintarMapa(f, filas){
   const porLoc = new Map();
   const porLocPorDepto = new Map(); // deptoKey -> Map(locKey -> n)
   const porDepPorDepto = new Map(); // deptoKey -> Map(dependencia -> n), usado solo para CAPITAL
+  // Mismas aperturas, pero contando PERSONAS FALLECIDAS (fallecidos en el lugar
+  // + fallecidos luego) en vez de cantidad de siniestros.
+  const falDepto = new Map();
+  const falLoc = new Map();
+  const falLocPorDepto = new Map();
+  const falDepPorDepto = new Map();
+  const sumar = (mapa, k, n) => mapa.set(k, (mapa.get(k)||0) + n);
+  const sumarEn = (contenedor, dk, k, n) => {
+    if(!contenedor.has(dk)) contenedor.set(dk, new Map());
+    sumar(contenedor.get(dk), k, n);
+  };
   const DEPTO_JURISDICCION = 'CAPITAL'; // departamento que se desglosa por jurisdicción en vez de por localidad
   for(const d of base){
     const dk = d.depto ? clave(d.depto) : null;
-    if(dk) porDepto.set(dk, (porDepto.get(dk)||0) + 1);
-    if(d.localidad) porLoc.set(clave(d.localidad), (porLoc.get(clave(d.localidad))||0) + 1);
+    const fa = (d.fl||0) + (d.fp||0);   // personas fallecidas del siniestro
+    if(dk){ sumar(porDepto, dk, 1); sumar(falDepto, dk, fa); }
+    if(d.localidad){
+      const lk = clave(d.localidad);
+      sumar(porLoc, lk, 1);
+      sumar(falLoc, lk, fa);
+    }
     if(dk && d.localidad){
       const lk = clave(d.localidad);
-      if(!porLocPorDepto.has(dk)) porLocPorDepto.set(dk, new Map());
-      const m = porLocPorDepto.get(dk);
-      m.set(lk, (m.get(lk)||0) + 1);
+      sumarEn(porLocPorDepto, dk, lk, 1);
+      sumarEn(falLocPorDepto, dk, lk, fa);
     }
     // Capital es una sola localidad (San Miguel de Tucumán), así que ahí no tiene
     // sentido desglosar por localidad: se guarda también por jurisdicción policial
     // para poder mostrar eso en su lugar al seleccionar el departamento.
     if(dk && d.dependencia){
-      if(!porDepPorDepto.has(dk)) porDepPorDepto.set(dk, new Map());
-      const m2 = porDepPorDepto.get(dk);
-      m2.set(d.dependencia, (m2.get(d.dependencia)||0) + 1);
+      sumarEn(porDepPorDepto, dk, d.dependencia, 1);
+      sumarEn(falDepPorDepto, dk, d.dependencia, fa);
     }
   }
 
@@ -584,21 +598,38 @@ function pintarMapa(f, filas){
     return escala[4];
   };
 
+  /* Texto auxiliar: en modo víctimas fatales se agrega la cantidad de personas
+     fallecidas al lado de la cantidad de siniestros. */
+  const txtSin = n => `${nro(n)} siniestro${n===1?'':'s'}`;
+  const txtFal = n => `${nro(n)} persona${n===1?'':'s'} fallecida${n===1?'':'s'}`;
+  const txtAmbos = (n, fa) => modoFatal ? `${txtSin(n)} · ${txtFal(fa)}` : txtSin(n);
+  // celda de valores de cada renglón de lista
+  const celdas = (n, fa) => modoFatal
+    ? `<span class="vl">${nro(n)}</span><span class="vl-fal" title="Personas fallecidas">${nro(fa)}</span>`
+    : `<span class="vl">${nro(n)}</span>`;
+  const encabezadoLista = modoFatal
+    ? `<div class="mapa-lista-cab"><span class="et-sin">Siniestros</span><span class="et-fal">Fallecidos</span></div>`
+    : '';
+
+  const totalSinSel = base.length;
+  const totalFalSel = base.reduce((a,d) => a + (d.fl||0) + (d.fp||0), 0);
+
   const [vx,vy,vw,vh] = MAPA_DATOS.viewBox;
   const paths = Object.entries(MAPA_DATOS.deptos).map(([k,v]) => {
     const n = porDepto.get(k) || 0;
+    const fa = falDepto.get(k) || 0;
     const nombre = DEPTO_NOMBRE[k] || v.cab || k;
     const verQue = k === DEPTO_JURISDICCION ? 'jurisdicciones policiales' : 'localidades';
     return `<path d="${v.d}" fill="${escalaColor(n)}" data-depto="${k}" tabindex="0" role="button"
-      aria-label="${esc(nombre)}: ${nro(n)} siniestro${n===1?'':'s'}. Tocar para ver ${verQue}."><title>${esc(nombre)}: ${nro(n)} siniestro${n===1?'':'s'}</title></path>`;
+      aria-label="${esc(nombre)}: ${txtAmbos(n, fa)}. Tocar para ver ${verQue}."><title>${esc(nombre)}: ${txtAmbos(n, fa)}</title></path>`;
   }).join('');
 
   const deptosConDato = Object.entries(MAPA_DATOS.deptos)
-    .map(([k,v]) => ({k, n: porDepto.get(k) || 0, nombre: DEPTO_NOMBRE[k] || v.cab || k}))
+    .map(([k,v]) => ({k, n: porDepto.get(k) || 0, fa: falDepto.get(k) || 0, nombre: DEPTO_NOMBRE[k] || v.cab || k}))
     .sort((a,b) => b.n - a.n);
 
   const localesConDato = Object.entries(MAPA_DATOS.localidades)
-    .map(([k,v]) => ({k, v, n: porLoc.get(k) || 0}))
+    .map(([k,v]) => ({k, v, n: porLoc.get(k) || 0, fa: falLoc.get(k) || 0}))
     .filter(o => o.n > 0)
     .sort((a,b) => b.n - a.n);
   const maxLoc = Math.max(1, ...localesConDato.map(o=>o.n));
@@ -608,7 +639,7 @@ function pintarMapa(f, filas){
   const burbujas = localesConDato
     .map(o => {
       const nombre = LOC_NOMBRE[o.k] || o.k;
-      return `<circle class="burbuja" cx="${o.v.x}" cy="${o.v.y}" r="${radio(o.n).toFixed(1)}"><title>${esc(nombre)}: ${nro(o.n)} siniestro${o.n===1?'':'s'}</title></circle>`;
+      return `<circle class="burbuja" cx="${o.v.x}" cy="${o.v.y}" r="${radio(o.n).toFixed(1)}"><title>${esc(nombre)}: ${txtAmbos(o.n, o.fa)}</title></circle>`;
     }).join('');
 
   cont.innerHTML = `
@@ -622,16 +653,20 @@ function pintarMapa(f, filas){
       ${modoFatal ? `<p class="mapa-badge-fatal">
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
         Víctimas fatales</p>` : ''}
-      <h4>Siniestros por departamento</h4>
+      ${modoFatal ? `<p class="mapa-total-fatal">
+        <b>${nro(totalSinSel)}</b> siniestro${totalSinSel===1?'':'s'} ·
+        <b>${nro(totalFalSel)}</b> persona${totalFalSel===1?'':'s'} fallecida${totalFalSel===1?'':'s'} en la selección</p>` : ''}
+      <h4>${modoFatal ? 'Siniestros y fallecidos por departamento' : 'Siniestros por departamento'}</h4>
       <div class="mapa-escala">
         <span style="background:${escala[0]}"></span><span style="background:${escala[1]}"></span>
         <span style="background:${escala[2]}"></span><span style="background:${escala[3]}"></span>
         <span style="background:${escala[4]}"></span>
       </div>
       <div class="mapa-escala-et"><span>Menos</span><span>Más (máx. ${nro(maxDepto)})</span></div>
+      ${encabezadoLista}
       <ul class="mapa-lista mapa-lista-scroll">
         ${deptosConDato.map(o =>
-          `<li><span class="pt" style="background:${escalaColor(o.n)}"></span><span class="nm">${esc(o.nombre)}</span><span class="vl">${nro(o.n)}</span></li>`
+          `<li><span class="pt" style="background:${escalaColor(o.n)}"></span><span class="nm">${esc(o.nombre)}</span>${celdas(o.n, o.fa)}</li>`
         ).join('')}
       </ul>
       <p class="mapa-ayuda">
@@ -640,11 +675,14 @@ function pintarMapa(f, filas){
         (en Capital, se muestran las jurisdicciones policiales).
       </p>
       <h4 style="margin-top:18px">Localidades</h4>
+      ${encabezadoLista}
       <ul class="mapa-lista mapa-lista-scroll">
         ${localesConDato.map(o =>
-          `<li><span class="pt"></span><span class="nm">${esc(LOC_NOMBRE[o.k]||o.k)}</span><span class="vl">${nro(o.n)}</span></li>`
+          `<li><span class="pt"></span><span class="nm">${esc(LOC_NOMBRE[o.k]||o.k)}</span>${celdas(o.n, o.fa)}</li>`
         ).join('') || '<li>Sin localidades geolocalizadas en esta selección.</li>'}
       </ul>
+      ${modoFatal ? `<p class="mapa-nota-fatal">La primera columna es la cantidad de siniestros y la segunda, en rojo,
+      la cantidad de personas fallecidas (fallecidos en el lugar + fallecidos luego).</p>` : ''}
       <p class="mapa-nota">El color de cada departamento indica su cantidad de siniestros; los círculos marcan las
       localidades con coordenadas disponibles, a mayor tamaño más registros. Límites simplificados con fines
       ilustrativos (fuente: IGN / BAHRA).</p>
@@ -675,12 +713,14 @@ function pintarMapa(f, filas){
 
     const nombre = nombreDepto(k);
     const total = porDepto.get(k) || 0;
+    const totalFal = falDepto.get(k) || 0;
     const esJurisdiccion = k === DEPTO_JURISDICCION;
+    const falItems = (esJurisdiccion ? falDepPorDepto : falLocPorDepto).get(k) || new Map();
     const items = esJurisdiccion
       ? [...(porDepPorDepto.get(k) || new Map()).entries()]
-          .map(([nombreDep, n]) => ({n, nombre: nombreDep}))
+          .map(([nombreDep, n]) => ({n, fa: falItems.get(nombreDep) || 0, nombre: nombreDep}))
       : [...(porLocPorDepto.get(k) || new Map()).entries()]
-          .map(([lk, n]) => ({n, nombre: LOC_NOMBRE[lk] || lk}));
+          .map(([lk, n]) => ({n, fa: falItems.get(lk) || 0, nombre: LOC_NOMBRE[lk] || lk}));
     items.sort((a,b) => b.n - a.n || a.nombre.localeCompare(b.nombre,'es'));
     const etiqueta = esJurisdiccion ? 'jurisdicción policial' : 'localidad';
 
@@ -691,11 +731,13 @@ function pintarMapa(f, filas){
           <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
         </button>
       </div>
-      <p class="mapa-detalle-total">${nro(total)} siniestro${total===1?'':'s'} en el departamento</p>
+      <p class="mapa-detalle-total">${nro(total)} siniestro${total===1?'':'s'} en el departamento${
+        modoFatal ? ` · <b class="fal">${nro(totalFal)}</b> persona${totalFal===1?'':'s'} fallecida${totalFal===1?'':'s'}` : ''}</p>
       ${esJurisdiccion ? '<p class="mapa-detalle-sub">Por jurisdicción policial</p>' : ''}
+      ${items.length ? encabezadoLista : ''}
       <ul class="mapa-lista mapa-lista-scroll">
         ${items.length
-          ? items.map(o => `<li><span class="pt"></span><span class="nm">${esc(o.nombre)}</span><span class="vl">${nro(o.n)}</span></li>`).join('')
+          ? items.map(o => `<li><span class="pt"></span><span class="nm">${esc(o.nombre)}</span>${celdas(o.n, o.fa)}</li>`).join('')
           : ''}
       </ul>
       ${items.length ? '' : `<p class="vacio">No hay ${etiqueta} registrada para los siniestros de este departamento.</p>`}
