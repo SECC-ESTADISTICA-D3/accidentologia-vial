@@ -60,8 +60,9 @@ code{background:#EEF1F5;padding:1px 6px;border-radius:4px;font-size:13px}
   </div>
 
   <div class="aviso">
-    El archivo que se descarga se llama <code>accidentologia.xlsx</code>. Copialo dentro de la carpeta
-    <code>datos/</code> del sitio, pisando el anterior, y publicá los cambios.
+    Se generan <b>dos archivos</b>: <code>accidentologia.json</code> (versión compacta, la que lee el sitio y
+    la que hace que abra rápido) y <code>accidentologia.xlsx</code> (respaldo). Copialos <b>los dos</b> dentro de
+    la carpeta <code>datos/</code> del sitio, pisando los anteriores, y publicá los cambios.
   </div>
 </main>
 
@@ -90,6 +91,38 @@ function procesar(file){
   fr.readAsArrayBuffer(file);
 }
 
+/* Formato compacto para el sitio: por cada columna, la lista de valores distintos y,
+   por registro, la posición de su valor en esa lista. Las fechas se guardan como
+   {d:'AAAA-MM-DD'}. Lo interpreta decodificarBase() en app.js. */
+function codificarBase(filas){
+  const nc = filas[0].length, n = filas.length - 1;
+  const p2 = x => String(x).padStart(2, '0');
+  const dic = [], cod = [];
+  for(let c = 0; c < nc; c++){
+    const mapa = new Map(), lista = [], col = new Array(n);
+    for(let r = 0; r < n; r++){
+      let v = filas[r + 1][c];
+      if(v === undefined) v = null;
+      if(v instanceof Date) v = isNaN(v) ? null : {d: v.getFullYear() + '-' + p2(v.getMonth() + 1) + '-' + p2(v.getDate())};
+      const k = (v && typeof v === 'object') ? 'd:' + v.d : typeof v + ':' + v;
+      let i = mapa.get(k);
+      if(i === undefined){ i = lista.length; mapa.set(k, i); lista.push(v); }
+      col[r] = i;
+    }
+    dic.push(lista); cod.push(col);
+  }
+  const hoy = new Date();
+  return {v:1, gen: hoy.getFullYear() + '-' + p2(hoy.getMonth() + 1) + '-' + p2(hoy.getDate()),
+          cols: filas[0], dic, cod};
+}
+
+function enlaceDescarga(nombre, blob){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombre;
+  return {url, a};
+}
+
 function generar(buf, nombre){
   try{
     const wb = XLSX.read(buf, {type:'array', cellDates:true});
@@ -111,11 +144,19 @@ function generar(buf, nombre){
     XLSX.utils.book_append_sheet(libro, nueva, 'BASE');
     XLSX.writeFile(libro, 'accidentologia.xlsx', {compression:true});
 
+    const json = JSON.stringify(codificarBase(salida));
+    const blobJson = new Blob([json], {type:'application/json'});
+    const dj = enlaceDescarga('accidentologia.json', blobJson);
+    setTimeout(() => dj.a.click(), 500);       // el navegador puede pedir permiso para la segunda descarga
+    const kb = n => new Intl.NumberFormat('es-AR').format(Math.round(n / 1024));
+
     res.innerHTML = `
       <div class="fila">Registros conservados<span class="m">${nro(filas.length-1)}</span></div>
       <div class="fila">Columnas estadísticas publicadas<span class="m">${nro(idx.length)}</span></div>
       <div class="fila">Columnas descartadas<span class="m">${nro(descartadas)}</span></div>
-      <p style="margin:16px 0 0">El archivo <b>accidentologia.xlsx</b> se descargó en tu carpeta de descargas.</p>
+      <div class="fila">Tamaño de <b>accidentologia.json</b><span class="m">${kb(blobJson.size)} KB</span></div>
+      <p style="margin:16px 0 0">Se descargaron <b>accidentologia.xlsx</b> y <b>accidentologia.json</b> en tu carpeta de descargas.
+      Si el navegador bloqueó alguno, <a href="${dj.url}" download="accidentologia.json"><b>descargá el .json desde acá</b></a>.</p>
       ${faltan.length ? `<p class="mal" style="margin-top:12px">No se encontraron estas columnas en la base, así que quedaron fuera:</p><ul class="mal">${faltan.map(c=>`<li>${c}</li>`).join('')}</ul>` : ''}`;
   }catch(err){
     res.innerHTML = '<p class="mal">El archivo no pudo interpretarse: ' + err.message + '</p>';

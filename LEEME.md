@@ -3,25 +3,34 @@
 Sitio público de estadísticas de siniestros viales.
 Policía de Tucumán · Departamento Operaciones Policiales D-3 · Sección Estadística y Archivo.
 
-## Cómo se actualiza
+## Cómo se actualiza (una vez por mes)
 
-**Reemplazá un solo archivo:**
+1. Abrí `preparar-base.html` con doble clic y arrastrale la **base completa** (el Excel con todos los datos).
+2. Te descarga **dos archivos**, ya depurados (conservan las 23 columnas estadísticas y descartan todos los datos personales):
+   - `accidentologia.json`: versión compacta que **lee el sitio** (pesa unas 33 veces menos que el Excel; por eso abre rápido, sobre todo en celulares).
+   - `accidentologia.xlsx`: respaldo, por si el `.json` faltara.
+3. Copiá **los dos** dentro de la carpeta `datos/`, pisando los anteriores.
+4. Si publicás en GitHub Pages: commit y push. En dos o tres minutos el sitio muestra los datos nuevos.
 
-```
-datos/accidentologia.xlsx
-```
+No hay que tocar el HTML ni ejecutar ningún script. Todo el proceso de `preparar-base.html` ocurre en tu equipo: no sube nada a internet.
 
-Guardá ahí la base actualizada con ese mismo nombre, pisando la anterior. No hay que tocar
-el HTML ni ejecutar ningún script: la página lee el Excel cada vez que alguien la abre y
-recalcula todos los indicadores y gráficos.
+> **Ojo:** si copiás solo el `.xlsx` y dejás el `.json` viejo, el sitio va a seguir mostrando los datos anteriores
+> (lee primero el `.json`). Para detectarlo, al pie de la página figura **"Registros hasta el ..."** con la fecha del
+> último registro cargado: verificá que coincida con lo esperado después de cada actualización.
 
-**Antes de copiarlo, pasá la base por `preparar-base.html`.** Abrí ese archivo con doble clic,
-arrastrale la base completa y te descarga `accidentologia.xlsx` ya depurado: conserva las 22
-columnas estadísticas y descarta todos los datos personales. Ese es el archivo que va en
-`datos/`. Trabaja de forma local, no sube nada a internet.
+Para probarlo en tu equipo sin servidor, abrí `index.html` con doble clic: como el navegador no puede leer archivos
+locales por seguridad, la página te va a pedir que elijas el archivo a mano (sirve el `.json` o el Excel) y funciona igual.
 
-Si publicás en GitHub Pages, el flujo completo es: reemplazar el archivo en la carpeta
-`datos/`, hacer commit y push. En dos o tres minutos el sitio ya muestra los datos nuevos.
+### Comparativo "2026 vs 2025" y mes en curso
+
+El año más reciente de la base suele estar incompleto (la planilla se actualiza mes a mes). Por eso las flechas de
+variación de los indicadores comparan **los mismos meses** de ambos años, y lo dicen en cada tarjeta (por ejemplo,
+"ene–ago 2026 vs 2025"). En el gráfico "Siniestros por mes" los meses que la base todavía no tiene quedan vacíos (no
+se dibujan como cero).
+
+Además, el último mes con datos del año en curso se deja afuera de la comparación y se dibuja punteado, porque suele
+estar a medio cargar. Si la base se carga siempre con meses completos, se puede desactivar poniendo
+`EXCLUIR_MES_EN_CURSO = false` al principio de `app.js`.
 
 ### Qué tiene que respetar el Excel
 
@@ -32,6 +41,7 @@ Si publicás en GitHub Pages, el flujo completo es: reemplazar el archivo en la 
   `TIPO DE VÍA` funcionan igual.
 - Se pueden agregar años nuevos: la página detecta sola los años presentes y arma la
   comparación entre ellos.
+- Estas condiciones las controla `preparar-base.html`; el `.json` que genera es el que usa el sitio.
 
 Si alguna vez se renombra una columna, hay que actualizar la lista `COLUMNAS` que está al
 principio de `app.js`.
@@ -114,11 +124,16 @@ id="modal-presentacion">`. Para actualizar nombres o cargos, editá ese bloque a
 
 ## Rendimiento
 
-Los logos institucionales en `assets/` están recortados al tamaño real en que se muestran
-(no hace falta que sean más grandes: aunque se peguen fotos de mayor resolución ahí, conviene
-redimensionarlas antes, porque el navegador igual las va a mostrar del mismo tamaño chico).
-Los scripts externos (`xlsx`, `chart.js`, `chartjs-plugin-datalabels`) y `app.js` se cargan
-con el atributo `defer` para no bloquear el primer dibujo de la página mientras se descargan.
+- **Datos compactos:** el sitio lee `datos/accidentologia.json` (unos 150 KB por la red) en vez de interpretar el Excel
+  (5 MB) en el navegador. La descarga de los datos arranca desde el `<head>`, en paralelo con el resto de la página.
+- **Sin dependencias externas en el uso normal:** Chart.js y su plugin de etiquetas están en `assets/vendor/` y las
+  tipografías en `assets/fonts/`. El lector de Excel (SheetJS) solo se descarga desde internet si hace falta el
+  respaldo `.xlsx` o si se elige un Excel a mano.
+- **Gráficos por cuadro:** se dibujan de a uno, así los indicadores aparecen primero y los filtros responden sin trabarse.
+- Los logos institucionales en `assets/` están recortados al tamaño real en que se muestran; conviene
+  redimensionar antes cualquier imagen nueva.
+- Si el servidor no comprime archivos (GitHub Pages sí lo hace), el `.json` pesa 1,1 MB en vez de 150 KB: activar la
+  compresión gzip para `.json`, `.js` y `.css`.
 
 ## Publicación
 
@@ -127,8 +142,10 @@ La estructura tiene que quedar así:
 
 ```
 index.html
+styles.css
 app.js
-assets/logo-d3.png
+assets/            (logos, fonts/ y vendor/)
+datos/accidentologia.json
 datos/accidentologia.xlsx
 ```
 

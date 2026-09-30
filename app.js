@@ -2,9 +2,25 @@
    Accidentología Vial — Provincia de Tucumán
    Policía de Tucumán · D-3 · Sección Estadística y Archivo
 
-   La página se actualiza reemplazando el archivo Excel ubicado en
-   datos/accidentologia.xlsx  (ver RUTAS_DATOS)
+   La página se actualiza reemplazando los archivos de datos/ que
+   genera preparar-base.html:
+     · datos/accidentologia.json  (versión compacta: es la que se lee)
+     · datos/accidentologia.xlsx  (respaldo, si no estuviera el .json)
    ============================================================= */
+
+/* Versión compacta de la base (unas 20 veces más liviana que el Excel y sin
+   necesidad de interpretar el .xlsx en el navegador): carga en una fracción
+   del tiempo, sobre todo en celulares. */
+const RUTA_JSON = 'datos/accidentologia.json';
+
+/* Lector de Excel: solo se descarga si hace falta (respaldo o archivo elegido a mano) */
+const URL_SHEETJS = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+
+/* Comparativo de los indicadores ("2026 vs 2025"): el año en curso se compara
+   contra los MISMOS meses del año anterior. Con true, además, se deja afuera el
+   último mes con datos del año en curso porque suele estar incompleto (la planilla
+   se actualiza una vez por mes). Poné false si la base se carga con meses completos. */
+const EXCLUIR_MES_EN_CURSO = true;
 
 const RUTAS_DATOS = [
   'datos/accidentologia.xlsx',
@@ -77,6 +93,16 @@ const DICC = {
 const sinAcento = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 const clave     = s => sinAcento(String(s||'')).toUpperCase().replace(/[^A-Z0-9]/g,'');
 const limpio    = s => String(s==null?'':s).replace(/\s+/g,' ').trim();
+/* devuelve una versión de fn que recuerda sus resultados (solo para textos y números) */
+function memoizar(fn){
+  const cache = new Map();
+  return function(x){
+    if(x !== null && typeof x === 'object') return fn(x);
+    let r = cache.get(x);
+    if(r === undefined){ r = fn(x); cache.set(x, r); }
+    return r;
+  };
+}
 const nro       = n => new Intl.NumberFormat('es-AR').format(n||0);
 const esc       = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -119,7 +145,53 @@ function tituloEs(txt){
    ============================================================= */
 const elCarga = document.getElementById('carga');
 
+/* Reconstruye la matriz de filas (encabezados + registros) desde el formato compacto:
+   cada columna guarda una lista de valores distintos y, por registro, la posición
+   de su valor en esa lista. */
+function decodificarBase(j){
+  if(!j || j.v !== 1 || !Array.isArray(j.cols) || !Array.isArray(j.cod) || !j.cod.length)
+    throw new Error('el archivo de datos compacto no tiene el formato esperado');
+  const nc = j.cols.length, n = j.cod[0].length;
+  const dic = j.dic.map(lista => lista.map(e =>
+    (e && typeof e === 'object') ? new Date(+e.d.slice(0,4), +e.d.slice(5,7)-1, +e.d.slice(8,10)) : e));
+  const filas = new Array(n + 1);
+  filas[0] = j.cols.slice();
+  for(let r = 0; r < n; r++){
+    const f = new Array(nc);
+    for(let c = 0; c < nc; c++) f[c] = dic[c][j.cod[c][r]];
+    filas[r + 1] = f;
+  }
+  return filas;
+}
+
+let _promesaSheetJS = null;
+function cargarSheetJS(){
+  if(window.XLSX) return Promise.resolve();
+  if(!_promesaSheetJS){
+    _promesaSheetJS = new Promise((ok, mal) => {
+      const sc = document.createElement('script');
+      sc.src = URL_SHEETJS;
+      sc.onload = ok;
+      sc.onerror = () => { _promesaSheetJS = null; mal(new Error('no se pudo descargar el lector de Excel (¿sin conexión?)')); };
+      document.head.appendChild(sc);
+    });
+  }
+  return _promesaSheetJS;
+}
+
 async function iniciar(){
+  // 1) versión compacta
+  let filas = null;
+  try{
+    // index.html ya inició la descarga (window.__datos); si no, se pide acá
+    let j;
+    if(window.__datos) j = await window.__datos;
+    else { const r = await fetch(RUTA_JSON, {cache:'no-cache'}); j = r.ok ? await r.json() : null; }
+    if(j) filas = decodificarBase(j);
+  }catch(e){ console.warn('No se pudo usar ' + RUTA_JSON + ', se prueba con el Excel.', e); }
+  if(filas){ procesarFilas(filas, RUTA_JSON); return; }
+
+  // 2) respaldo: el Excel
   for(const ruta of RUTAS_DATOS){
     try{
       const r = await fetch(ruta, {cache:'no-cache'});
@@ -157,9 +229,17 @@ function leerArchivoLocal(file){
   document.getElementById('carga-alta').hidden = true;
   document.getElementById('carga-barra').hidden = false;
   const fr = new FileReader();
-  fr.onload = () => procesarLibro(fr.result, file.name);
   fr.onerror = () => pedirArchivo('No se pudo leer el archivo.');
-  fr.readAsArrayBuffer(file);
+  if(/\.json$/i.test(file.name)){
+    fr.onload = () => {
+      try{ procesarFilas(decodificarBase(JSON.parse(fr.result)), file.name); }
+      catch(err){ pedirArchivo('El archivo no pudo interpretarse: ' + err.message); }
+    };
+    fr.readAsText(file);
+  } else {
+    fr.onload = () => procesarLibro(fr.result, file.name);
+    fr.readAsArrayBuffer(file);
+  }
 }
 
 /* ---------- modal "Presentación" ---------- */
@@ -192,24 +272,37 @@ document.addEventListener('keydown', e => {
   if(e.key === 'Escape' && mapaCerrarActivo) mapaCerrarActivo();
 });
 
-let DATOS = [], ANIOS = [], ACTUALIZADO = '';
+let DATOS = [], ANIOS = [], ACTUALIZADO = '', FECHA_MAX = null;
 const DEPTO_NOMBRE = {}, LOC_NOMBRE = {};
 
-function procesarLibro(buf, origen){
+async function procesarLibro(buf, origen){
+  try{
+    await cargarSheetJS();
+    await new Promise(r => setTimeout(r, 30));      // deja dibujar la pantalla de carga
+    const wb = XLSX.read(buf, {type:'array', cellDates:true, cellStyles:false});
+    const hoja = HOJA_BASE && wb.Sheets[HOJA_BASE] ? HOJA_BASE : wb.SheetNames[0];
+    const filas = XLSX.utils.sheet_to_json(wb.Sheets[hoja], {header:1, raw:true, defval:null, blankrows:false});
+    procesarFilas(filas, origen);
+  }catch(err){
+    console.error(err);
+    pedirArchivo('El archivo no pudo interpretarse: ' + err.message);
+  }
+}
+
+function procesarFilas(filas, origen){
   setTimeout(()=>{
     try{
-      const wb = XLSX.read(buf, {type:'array', cellDates:true, cellStyles:false});
-      const hoja = HOJA_BASE && wb.Sheets[HOJA_BASE] ? HOJA_BASE : wb.SheetNames[0];
-      const filas = XLSX.utils.sheet_to_json(wb.Sheets[hoja], {header:1, raw:true, defval:null, blankrows:false});
       armarDatos(filas);
-      document.getElementById('pie-act').innerHTML = '<br>Base cargada desde <b>' + origen + '</b>.';
+      const hasta = FECHA_MAX ? FECHA_MAX.toLocaleDateString('es-AR', {day:'numeric', month:'long', year:'numeric'}) : '';
+      document.getElementById('pie-act').innerHTML =
+        (hasta ? '<br>Registros hasta el <b>' + hasta + '</b>.' : '') + '<br>Base cargada desde <b>' + origen + '</b>.';
       construirInterfaz();
       elCarga.remove();
     }catch(err){
       console.error(err);
       pedirArchivo('El archivo no pudo interpretarse: ' + err.message);
     }
-  }, 30);
+  }, 0);
 }
 
 function armarDatos(filas){
@@ -226,10 +319,13 @@ function armarDatos(filas){
   if(idx.anio < 0 || idx.causa < 0)
     throw new Error('no se encontraron las columnas AÑO y CAUSA en la primera hoja');
 
+  // los textos se repiten miles de veces con pocos valores distintos: se calcula cada uno una sola vez
+  const mLimpio = memoizar(limpio), mLindo = memoizar(lindo), mTitulo = memoizar(tituloEs), mClave = memoizar(clave);
   const num = v => { const n = Number(v); return isFinite(n) ? n : 0; };
-  const val = (f,i) => i < 0 ? '' : limpio(f[i]);
+  const val = (f,i) => i < 0 ? '' : mLimpio(f[i]);
 
-  DATOS = [];
+  DATOS = []; FECHA_MAX = null;
+  for(const k in _cacheMeses) delete _cacheMeses[k];
   for(let r = 1; r < filas.length; r++){
     const f = filas[r];
     if(!f || f.every(c => c === null || c === '')) continue;
@@ -240,33 +336,34 @@ function armarDatos(filas){
     let mes = val(f, idx.mes).toLowerCase(), dia = '';
     const fch = idx.fecha >= 0 ? f[idx.fecha] : null;
     if(fch instanceof Date && !isNaN(fch)){
+      if(!FECHA_MAX || fch > FECHA_MAX) FECHA_MAX = fch;
       if(!mes) mes = MESES[fch.getMonth()];
       dia = DIAS[fch.getDay()];
     }
 
-    const dNombre = lindo(val(f, idx.depto)), lNombre = tituloEs(val(f, idx.localidad));
-    if(dNombre && !DEPTO_NOMBRE[clave(dNombre)]) DEPTO_NOMBRE[clave(dNombre)] = dNombre;
-    if(lNombre && !LOC_NOMBRE[clave(lNombre)]) LOC_NOMBRE[clave(lNombre)] = lNombre;
+    const dNombre = mLindo(val(f, idx.depto)), lNombre = mTitulo(val(f, idx.localidad));
+    if(dNombre && !DEPTO_NOMBRE[mClave(dNombre)]) DEPTO_NOMBRE[mClave(dNombre)] = dNombre;
+    if(lNombre && !LOC_NOMBRE[mClave(lNombre)]) LOC_NOMBRE[mClave(lNombre)] = lNombre;
 
     DATOS.push({
       anio: String(anio),
       mes,
       dia,
-      zonaHoraria: lindo(val(f, idx.zonaHoraria)),
-      depto:       lindo(val(f, idx.depto)),
-      localidad:   tituloEs(val(f, idx.localidad)),
-      uurr:        lindo(val(f, idx.uurr)),
-      dependencia: lindo(val(f, idx.dependencia)),
-      zona:        lindo(val(f, idx.zona)),
-      tipoVia:     lindo(val(f, idx.tipoVia)),
-      causa:       lindo(causa),
-      catSin:      lindo(val(f, idx.catSin)),
-      tipoSin:     lindo(val(f, idx.tipoSin)),
-      p12:         lindo(val(f, idx.p12)),
-      p23:         lindo(val(f, idx.p23)),
-      sexo:        lindo(val(f, idx.sexo)),
-      rango:       lindo(val(f, idx.rango)),
-      condicion:   lindo(val(f, idx.condicion)),
+      zonaHoraria: mLindo(val(f, idx.zonaHoraria)),
+      depto:       mLindo(val(f, idx.depto)),
+      localidad:   mTitulo(val(f, idx.localidad)),
+      uurr:        mLindo(val(f, idx.uurr)),
+      dependencia: mLindo(val(f, idx.dependencia)),
+      zona:        mLindo(val(f, idx.zona)),
+      tipoVia:     mLindo(val(f, idx.tipoVia)),
+      causa:       mLindo(causa),
+      catSin:      mLindo(val(f, idx.catSin)),
+      tipoSin:     mLindo(val(f, idx.tipoSin)),
+      p12:         mLindo(val(f, idx.p12)),
+      p23:         mLindo(val(f, idx.p23)),
+      sexo:        mLindo(val(f, idx.sexo)),
+      rango:       mLindo(val(f, idx.rango)),
+      condicion:   mLindo(val(f, idx.condicion)),
       hecho:       causa !== '',            // fila cabecera del siniestro
       il:  num(f[idx.ileso]),
       hl:  num(f[idx.leves]),
@@ -447,20 +544,64 @@ function totales(filas){
   return t;
 }
 
+/* ---- períodos comparables ----------------------------------------------------
+   El año en curso (el más reciente de la base) tiene solo algunos meses cargados;
+   compararlo contra el año anterior completo daba una baja falsa. Se comparan los
+   mismos meses. Con EXCLUIR_MES_EN_CURSO se omite además el último mes con datos,
+   que suele estar a medio cargar.                                                  */
+const MES_IDX = Object.fromEntries(MESES.map((m,i) => [m, i]));
+const MES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const _cacheMeses = {};
+
+/* meses (0-11) con al menos un siniestro cargado en el año, ordenados */
+function mesesConDatos(anio){
+  if(!_cacheMeses[anio]){
+    const set = new Set();
+    for(const d of DATOS) if(d.anio === anio && d.hecho && d.mes in MES_IDX) set.add(MES_IDX[d.mes]);
+    _cacheMeses[anio] = [...set].sort((x,y) => x-y);
+  }
+  return _cacheMeses[anio];
+}
+const anioEnCurso = () => ANIOS[ANIOS.length - 1];
+
+/* último mes con datos del año en curso, o null si el año está completo */
+function mesEnCurso(){
+  const m = mesesConDatos(anioEnCurso());
+  return (m.length && m.length < 12) ? m[m.length - 1] : null;
+}
+
+/* meses que se usan para comparar el año `a` con el anterior */
+function mesesComparables(a){
+  let m = mesesConDatos(a).slice();
+  if(a === anioEnCurso() && EXCLUIR_MES_EN_CURSO && mesEnCurso() !== null && m.length > 1) m.pop();
+  return m;
+}
+
+function etiquetaPeriodo(meses){
+  if(!meses.length || meses.length === 12) return '';
+  const primero = MES_CORTO[meses[0]], ultimo = MES_CORTO[meses[meses.length-1]];
+  return (primero === ultimo ? primero : primero + '–' + ultimo) + ' ';
+}
+
 function pintarKpis(filas, t){
-  // variación entre los dos años más recientes presentes en la selección
+  // variación entre los dos años más recientes presentes en la selección,
+  // sobre los mismos meses de ambos
   const presentes = [...new Set(filas.map(d=>d.anio))].sort();
   let cmp = null;
   if(presentes.length >= 2){
     const a = presentes[presentes.length-1], b = presentes[presentes.length-2];
-    const ta = totales(filas.filter(d=>d.anio===a)), tb = totales(filas.filter(d=>d.anio===b));
-    cmp = {a, b, ta, tb};
+    const meses = mesesComparables(a);
+    const set = new Set(meses);
+    const enPeriodo = (d) => set.has(MES_IDX[d.mes]);
+    const ta = totales(filas.filter(d => d.anio === a && enPeriodo(d)));
+    const tb = totales(filas.filter(d => d.anio === b && enPeriodo(d)));
+    cmp = {a, b, ta, tb, rotulo: etiquetaPeriodo(meses)};
   }
   const delta = (k) => {
     if(!cmp || !cmp.tb[k]) return '';
     const p = (cmp.ta[k] - cmp.tb[k]) / cmp.tb[k] * 100;
     const cls = p > 0 ? 'sube' : (p < 0 ? 'baja' : '');
-    return `<div class="d ${cls}">${p>0?'▲':(p<0?'▼':'=')} ${Math.abs(p).toFixed(1)}% · ${cmp.a} vs ${cmp.b}</div>`;
+    return `<div class="d ${cls}">${p>0?'▲':(p<0?'▼':'=')} ${Math.abs(p).toFixed(1)}% · ${cmp.rotulo}${cmp.a} vs ${cmp.b}</div>`;
   };
   const tarjetas = [
     ['sin','Siniestros registrados'], ['per','Personas involucradas'],
@@ -476,7 +617,7 @@ function pintarKpis(filas, t){
    ============================================================= */
 const SECCIONES = [
   {titulo:'Cuándo ocurren', bajada:'Distribución de los siniestros a lo largo del año, de la semana y del día.', fichas:[
-    {id:'mes',  titulo:'Siniestros por mes', sub:'Siniestros registrados en cada mes, comparados por año', tipo:'linea', dim:'mes', orden:'mes', ancha:true},
+    {id:'mes',  titulo:'Siniestros por mes', sub:'Siniestros registrados en cada mes, comparados por año.' + (EXCLUIR_MES_EN_CURSO ? ' El tramo punteado es el mes en curso, todavía incompleto.' : ''), tipo:'linea', dim:'mes', orden:'mes', ancha:true},
     {id:'dia',  titulo:'Siniestros por día de la semana', sub:'Según la fecha del hecho', tipo:'barra', dim:'dia', orden:'dia'},
     {id:'fhor', titulo:'Franja horaria', sub:'Siniestros ocurridos en horario diurno y nocturno', tipo:'barra', dim:'zonaHoraria'}
   ]},
@@ -520,11 +661,25 @@ Chart.defaults.font.size = 12;
 Chart.defaults.color = '#3C556E';
 if(window.ChartDataLabels) Chart.register(ChartDataLabels);
 
+/* Los gráficos se dibujan de a uno por cuadro (no los ~15 de golpe): así la pantalla
+   responde enseguida y los filtros no se sienten trabados. Si llega una actualización
+   nueva mientras se dibujaba, la tanda anterior se abandona. */
+let _tandaGraficos = 0;
 function pintarGraficos(filas){
+  const tanda = ++_tandaGraficos;
   const anios = [...new Set(filas.map(d=>d.anio))].sort();
-  SECCIONES.forEach(sec => sec.fichas.forEach(f => {
-    if(f.tipo === 'mapa') pintarMapa(f, filas); else pintarFicha(f, filas, anios);
-  }));
+  const fichas = SECCIONES.flatMap(sec => sec.fichas);
+  let i = 0;
+  const paso = () => {
+    if(tanda !== _tandaGraficos) return;
+    const t0 = performance.now();
+    do{
+      const f = fichas[i++];
+      if(f.tipo === 'mapa') pintarMapa(f, filas); else pintarFicha(f, filas, anios);
+    }while(i < fichas.length && performance.now() - t0 < 12);
+    if(i < fichas.length) setTimeout(paso, 0);
+  };
+  paso();
 }
 
 /* =============================================================
@@ -801,9 +956,20 @@ function pintarFicha(f, filas, anios){
 
   const etiquetas = claves.map(v => f.dim === 'mes' ? lindo(v) : v);
   const muchasCategorias = claves.length > 9;
+  const esMensual = f.tipo === 'linea' && f.dim === 'mes';
+  const mesActual = esMensual ? mesEnCurso() : null;                  // mes (0-11) en curso, si hay
+  const ixActual = mesActual === null ? -1 : claves.indexOf(MESES[mesActual]);
   const datasets = anios.map((a,i) => ({
     label: a,
-    data: claves.map(v => porAnio[a].get(v) || 0),
+    // un mes que la base todavía no tiene para ese año queda vacío (no es un "0")
+    data: claves.map(v => {
+      if(esMensual && !mesesConDatos(a).includes(MES_IDX[v])) return null;
+      return porAnio[a].get(v) || 0;
+    }),
+    segment: (esMensual && a === anioEnCurso() && ixActual >= 0)
+      ? {borderDash: ctx => ctx.p1DataIndex === ixActual ? [5,4] : undefined} : undefined,
+    pointBackgroundColor: (esMensual && a === anioEnCurso() && ixActual >= 0)
+      ? (ctx => ctx.dataIndex === ixActual ? '#fff' : colorPorAnio(a)) : colorPorAnio(a),
     backgroundColor: colorPorAnio(a),
     borderColor: colorPorAnio(a),
     borderWidth: f.tipo === 'linea' ? 2.5 : 0,
