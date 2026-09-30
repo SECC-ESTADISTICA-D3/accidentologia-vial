@@ -131,15 +131,15 @@ p{overflow-wrap:break-word; text-wrap:pretty}
 /* franja institucional */
 .marca{display:grid; grid-template-columns:auto minmax(0,1fr) auto; column-gap:14px; align-items:center;
   padding:14px 0 16px}
-.marca-escudo{height:56px; width:auto; display:block}
+.marca-escudo{height:68px; width:auto; display:block}
 .marca-txt{min-width:0}
-.marca-org{font-family:var(--f-display); font-weight:800; font-size:clamp(23px, 3.4vw, 32px); line-height:1;
-  letter-spacing:.03em; text-transform:uppercase}
-.marca-dep{margin-top:5px; font-size:clamp(12px, 1.3vw, 13.5px); line-height:1.4; color:#B7C9DC}
+.marca-org{font-family:var(--f-display); font-weight:800; font-size:clamp(25px, 4.4vw, 44px); line-height:1.05;
+  letter-spacing:.03em; text-shadow:0 1px 0 rgba(0,0,0,.25); text-transform:uppercase}
+.marca-dep{margin-top:7px; font-size:clamp(14px, 1.9vw, 19px); font-weight:600; line-height:1.35; color:#EAF2FA}
 .marca-dep span{display:inline}
 .marca-dep span + span{margin-left:12px; padding-left:12px; border-left:1px solid rgba(255,255,255,.3)}
 .marca-sellos{display:flex; align-items:center; gap:14px}
-.marca-sellos img{height:50px; width:auto; display:block}
+.marca-sellos img{height:60px; width:auto; display:block}
 
 /* eje de calzada: línea punteada a todo el ancho */
 .hero-eje{height:4px;
@@ -148,7 +148,7 @@ p{overflow-wrap:break-word; text-wrap:pretty}
 /* título */
 .titular{display:grid; grid-template-columns:minmax(0,1fr); gap:24px; padding-top:clamp(26px, 5vw, 48px)}
 .titular-txt{min-width:0}
-.hero h1{font-family:var(--f-display); font-weight:800; font-size:clamp(38px, 8.4vw, 76px);
+.hero h1{font-family:var(--f-display); font-weight:800; font-size:clamp(30px, 6.4vw, 58px);
   line-height:.96; letter-spacing:-.004em; max-width:12.5em}
 .bajada{margin-top:16px; max-width:58ch; font-size:clamp(15.5px, 1.6vw, 17.5px); line-height:1.6; color:#C6D5E5}
 .periodo{display:inline-flex; align-items:center; gap:9px; margin-top:20px; padding:6px 15px 6px 12px;
@@ -170,9 +170,9 @@ p{overflow-wrap:break-word; text-wrap:pretty}
   .bajada{font-size:15px; margin-top:14px}
   .periodo{margin-top:16px}
   .marca{column-gap:11px; row-gap:10px}
-  .marca-escudo{height:44px}
+  .marca-escudo{height:50px}
   .marca-sellos{gap:9px}
-  .marca-sellos img{height:38px}
+  .marca-sellos img{height:42px}
   /* la leyenda pasa a su propia fila, a todo el ancho, para no comprimir el nombre */
   .marca-txt{display:contents}
   .marca-org{grid-column:2; grid-row:1}
@@ -199,7 +199,7 @@ p{overflow-wrap:break-word; text-wrap:pretty}
   padding:13px 15px 14px}
 .kpi .k{order:1; font-size:13.5px; font-weight:600; line-height:1.3; color:var(--tinta-70)}
 .kpi .v{order:2; margin-top:8px; font-family:var(--f-display); font-weight:800;
-  font-size:clamp(36px, 10.5vw, 48px); line-height:1; letter-spacing:-.01em}
+  font-size:clamp(30px, 8.6vw, 40px); line-height:1; letter-spacing:-.01em}
 .kpi .d{order:3; margin-top:auto; padding-top:9px; font-size:12.5px; font-weight:600; line-height:1.35; color:var(--tinta-55)}
 .kpi .d.sube{color:var(--sube)}
 .kpi .d.baja{color:var(--baja)}
@@ -212,7 +212,7 @@ p{overflow-wrap:break-word; text-wrap:pretty}
 .kpi:nth-child(3){background:var(--fallecido-fondo); border-color:var(--fallecido-fondo); color:#fff;
   padding:18px 20px 18px}
 .kpi:nth-child(3) .k{font-size:16px; font-weight:600; color:#F6DADC; margin-bottom:auto}
-.kpi:nth-child(3) .v{margin-top:22px; font-size:clamp(84px, 24vw, 132px); line-height:.82; letter-spacing:-.015em}
+.kpi:nth-child(3) .v{margin-top:22px; font-size:clamp(64px, 18vw, 100px); line-height:.82; letter-spacing:-.015em}
 .kpi:nth-child(3) .d{color:#F6DADC; font-size:13.5px; padding-top:14px}
 .kpi:nth-child(3) .d.sube{color:#FFC9CD}
 .kpi:nth-child(3) .d.baja{color:#BDEBD0}
@@ -242,8 +242,8 @@ p{overflow-wrap:break-word; text-wrap:pretty}
   .kpi:nth-child(6) .k{flex:none}
   .kpi:nth-child(6) .v{margin-top:8px}
   .kpi:nth-child(6) .d{margin:auto 0 0; padding-top:9px}
-  .kpi .v{font-size:clamp(38px, 5.4vw, 50px)}
-  .kpi:nth-child(3) .v{font-size:clamp(96px, 16vw, 132px)}
+  .kpi .v{font-size:clamp(32px, 4.6vw, 42px)}
+  .kpi:nth-child(3) .v{font-size:clamp(76px, 12vw, 100px)}
 }
 /* escritorio (30 columnas: permite 2 indicadores arriba y 3 abajo alineados) */
 @media (min-width:1000px){
@@ -255,9 +255,9 @@ p{overflow-wrap:break-word; text-wrap:pretty}
   .kpi:nth-child(5){grid-column:19 / span 6; grid-row:2}
   .kpi:nth-child(6){grid-column:25 / span 6; grid-row:2}
   .kpi{padding:16px 18px 16px}
-  .kpi .v{font-size:clamp(46px, 4.4vw, 62px)}
+  .kpi .v{font-size:clamp(38px, 3.6vw, 50px)}
   .kpi:nth-child(3){padding:22px 26px 22px}
-  .kpi:nth-child(3) .v{font-size:clamp(120px, 11vw, 160px)}
+  .kpi:nth-child(3) .v{font-size:clamp(92px, 8.5vw, 124px)}
 }
 
 /* filtros activos */
@@ -549,7 +549,7 @@ p{overflow-wrap:break-word; text-wrap:pretty}
   .periodo{margin-top:10px}
   .resumen{padding-top:14px}
   .kpi{break-inside:avoid}
-  .kpi:nth-child(3) .v{font-size:88px}
+  .kpi:nth-child(3) .v{font-size:72px}
   .marco{display:block; padding:16px var(--m) 0}
   .seccion{margin-bottom:26px}
   .seccion>h2, .seccion>p{break-after:avoid}

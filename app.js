@@ -440,6 +440,8 @@ const idxRango = v => {
    3. Interfaz
    ============================================================= */
 function construirInterfaz(){
+  // Al abrir, se muestra solo el año más reciente de la base (los demás se eligen en el filtro "Año")
+  if(ANIOS.length) seleccion.anio.add(anioEnCurso());
   dibujarPanel();
   document.getElementById('secciones').innerHTML = SECCIONES.map(sec => `
     <section class="seccion">
@@ -586,15 +588,26 @@ function etiquetaPeriodo(meses){
 function pintarKpis(filas, t){
   // variación entre los dos años más recientes presentes en la selección,
   // sobre los mismos meses de ambos
-  const presentes = [...new Set(filas.map(d=>d.anio))].sort();
+  let presentes = [...new Set(filas.map(d=>d.anio))].sort();
+  let fuente = filas;
+  // Con un único año elegido en el filtro, se lo compara igual con el año anterior de la base
+  // (respetando el resto de los filtros), así las flechas de variación se mantienen.
+  if(seleccion.anio.size === 1){
+    const ia = ANIOS.indexOf([...seleccion.anio][0]);
+    if(ia > 0){
+      presentes = [ANIOS[ia-1], ANIOS[ia]];
+      const otros = SEGMENTADORES.filter(s => s.campo !== 'anio' && seleccion[s.campo].size);
+      fuente = DATOS.filter(d => otros.every(s => seleccion[s.campo].has(d[s.campo])));
+    }
+  }
   let cmp = null;
   if(presentes.length >= 2){
     const a = presentes[presentes.length-1], b = presentes[presentes.length-2];
     const meses = mesesComparables(a);
     const set = new Set(meses);
     const enPeriodo = (d) => set.has(MES_IDX[d.mes]);
-    const ta = totales(filas.filter(d => d.anio === a && enPeriodo(d)));
-    const tb = totales(filas.filter(d => d.anio === b && enPeriodo(d)));
+    const ta = totales(fuente.filter(d => d.anio === a && enPeriodo(d)));
+    const tb = totales(fuente.filter(d => d.anio === b && enPeriodo(d)));
     cmp = {a, b, ta, tb, rotulo: etiquetaPeriodo(meses)};
   }
   const delta = (k) => {
